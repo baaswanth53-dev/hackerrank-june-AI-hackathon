@@ -1,161 +1,188 @@
-# HackerRank Orchestrate
+# Multi-Modal Evidence Review System
 
-Starter repository for the **HackerRank Orchestrate** 24-hour hackathon.
+An automated damage claim verification system that analyzes submitted images against user claims using a two-pass VLM pipeline.
 
-Build a system that verifies visual evidence for damage claims across three object types: **cars**, **laptops**, and **packages**.
+## Architecture
 
-Your system will receive claim conversations, one or more submitted images, user claim history, and minimum evidence requirements. It must decide whether the submitted images support the claim, contradict it, or do not provide enough information.
-
-Read [`problem_statement.md`](./problem_statement.md) for the full task spec, input/output schema, and allowed values.
-
----
-
-## Contents
-
-1. [Repository layout](#repository-layout)
-2. [What you need to build](#what-you-need-to-build)
-3. [Where your code goes](#where-your-code-goes)
-4. [Quickstart](#quickstart)
-5. [Evaluation](#evaluation)
-6. [Chat transcript logging](#chat-transcript-logging)
-7. [Submission](#submission)
-8. [Judge interview](#judge-interview)
-
----
-
-## Repository layout
-
-```text
-.
-├── AGENTS.md                         # Rules for AI coding tools + transcript logging
-├── problem_statement.md              # Full task description and I/O schema
-├── README.md                         # You are here
-├── code/                             # Build your solution here
-│   ├── main.py                       # Suggested terminal entry point
-│   └── evaluation/
-│       └── main.py                   # Suggested evaluation entry point
-└── dataset/
-    ├── sample_claims.csv             # Inputs + expected outputs for development
-    ├── claims.csv                    # Inputs only; run your system on these rows
-    ├── user_history.csv              # Historical claim counts and risk context
-    ├── evidence_requirements.csv     # Minimum image evidence requirements
-    └── images/
-        ├── sample/                   # Images referenced by sample_claims.csv
-        └── test/                     # Images referenced by claims.csv
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                        main.py (Orchestrator)                    │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                  │
+│  ┌──────────┐   ┌──────────────┐   ┌────────────────────────┐  │
+│  │data_loader│──▶│ preprocessor │──▶│     pass1_vlm          │  │
+│  │           │   │              │   │  (GPT-4o multimodal)   │  │
+│  └──────────┘   └──────────────┘   └───────────┬────────────┘  │
+│                                                  │               │
+│                                                  ▼               │
+│                                     ┌────────────────────────┐  │
+│                                     │   pass2_validator       │  │
+│                                     │  5-step pipeline:       │  │
+│                                     │  1. Enum Enforcer       │  │
+│                                     │  2. Evidence Matcher    │  │
+│                                     │  3. Risk Flag Computer  │  │
+│                                     │  4. Adversarial Guard   │  │
+│                                     │  5. Verdict Finalizer   │  │
+│                                     │  (GPT-4o)               │  │
+│                                     └───────────┬────────────┘  │
+│                                                  │               │
+│                                                  ▼               │
+│                                     ┌────────────────────────┐  │
+│                                     │    output_writer        │  │
+│                                     │  (validates + writes    │  │
+│                                     │   output.csv)           │  │
+│                                     └────────────────────────┘  │
+└─────────────────────────────────────────────────────────────────┘
 ```
 
----
-
-## What you need to build
-
-A system that, for each row in `dataset/claims.csv`, produces one row in `output.csv`.
-
-Input fields:
-
-| Column | Meaning |
-|---|---|
-| `user_id` | User submitting the claim; use this to look up `dataset/user_history.csv` |
-| `image_paths` | One or more submitted image paths, separated by semicolons |
-| `user_claim` | Chat transcript describing the issue |
-| `claim_object` | `car`, `laptop`, or `package` |
-
-Required output fields:
-
-| Column | Meaning |
-|---|---|
-| `evidence_standard_met` | Whether the image set is sufficient to evaluate the claim |
-| `evidence_standard_met_reason` | Short reason for the evidence decision |
-| `risk_flags` | Semicolon-separated risk flags, or `none` |
-| `issue_type` | Visible issue type |
-| `object_part` | Relevant object part |
-| `claim_status` | `supported`, `contradicted`, or `not_enough_information` |
-| `claim_status_justification` | Concise explanation grounded in the image evidence |
-| `supporting_image_ids` | Image IDs supporting the decision, or `none` |
-| `valid_image` | Whether the image set is usable for automated review |
-| `severity` | `none`, `low`, `medium`, `high`, or `unknown` |
-
-Hard requirements:
-
-- Must read the provided CSV files and local images.
-- Must produce `output.csv` with the exact schema in `problem_statement.md`.
-- Must include an evaluation workflow
-- Must avoid hardcoded test labels or file-specific answers.
-
-Beyond that you are free to bring your own approach: VLMs, LLMs, structured prompting, rule layers, batching, caching, evaluation pipelines, model comparison, or anything else.
-
----
-
-## Where your code goes
-
-All of your work belongs in [`code/`](./code/). The repo ships with empty starter files that you can grow into your full solution.
-
-Suggested conventions:
-
-- Put your main runnable solution in `code/main.py`, or document your own entry point clearly.
-- Put evaluation code under `code/evaluation/` or an `evaluation/` folder included in your final `code.zip`.
-- Write final predictions to `output.csv`.
-
----
-
-## Quickstart
-
-Clone this repository:
+## Quick Start
 
 ```bash
-git clone git@github.com:interviewstreet/hackerrank-orchestrate-june26.git
-cd hackerrank-orchestrate-june26
+# 1. Setup
+cd code/
+python -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+
+# 2. Configure API key
+cp .env.example .env
+# Edit .env and add your OPENAI_API_KEY
+
+# 3. Run on test claims (produces output.csv)
+python main.py
+
+# 4. Run evaluation on sample claims
+python evaluation/main.py
+
+# 5. Run end-to-end test on specific claims
+python test_e2e.py --sample user_001 user_005
 ```
 
-You are free to use any language or runtime. Python, JavaScript, and TypeScript are all reasonable choices.
+## File Structure
 
----
+```
+code/
+├── main.py                  # Entry point — processes claims.csv → output.csv
+├── config.py                # API keys, model settings, enum values, file paths
+├── data_loader.py           # Loads CSVs into structured dicts with O(1) lookups
+├── preprocessor.py          # Builds context bundle per claim (extraction, injection detection)
+├── pass1_vlm.py             # VLM call (GPT-4o) — image + text → structured JSON
+├── pass2_validator.py       # 5-step validation pipeline → final output fields
+├── output_writer.py         # CSV writer with strict enum validation
+├── test_e2e.py              # End-to-end test script with verbose output
+├── requirements.txt         # Python dependencies
+├── .env.example             # API key template
+├── .gitignore               # Prevents .env and cache from being committed
+├── prompts/
+│   ├── pass1_system.txt     # VLM system prompt (analysis rules, originality check)
+│   ├── pass1_user.txt       # VLM user prompt template (claim + decision guidance)
+│   └── pass2_verdict.txt    # Verdict finalizer prompt (decision logic)
+└── evaluation/
+    ├── main.py              # Evaluation script — compares against ground truth
+    ├── eval_output.csv      # Predictions on sample_claims.csv
+    └── evaluation_report.md # Accuracy metrics and per-claim breakdown
+```
 
-## Evaluation
+## Pipeline Details
 
-The evaluation report should include:
+### Pass 1: VLM Image Analysis (GPT-4o)
 
-- metrics on `dataset/sample_claims.csv`
-- at least two strategies, prompts, or model configurations compared
-- the final strategy used for `output.csv`
-- operational analysis covering model calls, token usage, image usage, approximate cost, runtime, and TPM/RPM considerations
+Sends images + claim context to GPT-4o with structured JSON output. The VLM:
+- Analyzes each image independently (object, part, damage, severity, quality)
+- Checks image originality (AI-generated, stock, screenshot detection)
+- Determines claim alignment (supported / contradicted / unclear)
+- Prioritizes the claimed part when multiple damage types are visible
 
----
+### Pass 2: Validation Pipeline (5 deterministic steps + 1 LLM call)
 
-## Chat transcript logging
+| Step | Name | Type | Purpose |
+|------|------|------|---------|
+| 1 | Enum Enforcer | Deterministic | Fuzzy-maps VLM strings to valid enum values |
+| 2 | Evidence Rule Matcher | Deterministic | Checks image evidence meets requirements |
+| 3 | Risk Flag Computer | Deterministic | Merges quality + history + adversarial flags |
+| 4 | Adversarial Guard | Deterministic | Detects injection in images/text |
+| 5 | Verdict Finalizer | LLM (GPT-4o) | Produces final claim_status + justification |
 
-This repo ships with an `AGENTS.md` that modern AI coding tools may read. It instructs the tool to append conversation turns to a shared log file:
+### Key Design Decisions
 
-| Platform | Path |
-|---|---|
-| macOS / Linux | `$HOME/hackerrank_orchestrate/log.txt` |
-| Windows | `%USERPROFILE%\hackerrank_orchestrate\log.txt` |
+- **Two-pass architecture**: Pass 1 is the expensive multimodal call (GPT-4o); Pass 2 is mostly deterministic Python with one text-only LLM call (GPT-4o) for the final verdict.
+- **Enum enforcement via fuzzy matching**: VLMs are unreliable with exact string formatting. The enum enforcer uses exact → substring → synonyms → SequenceMatcher (≥0.6 threshold) → fallback.
+- **Business rules codified**: `manual_review_required` always accompanies `user_history_risk`, `claim_mismatch`, `text_instruction_present`, or `non_original_image`.
+- **Prompt injection resistance**: Dual-layer detection (regex in preprocessor + VLM-detected text in images). Injection never overrides visual evidence.
+- **Rate limiting**: Both GPT-4o and GPT-4o-mini have 500 RPM (no artificial delays needed). Checkpoint/resume system for long runs.
+- **Strict output validation**: All enum fields are validated before CSV write. Invalid values crash with a descriptive error rather than producing bad output.
+- **Fault tolerance**: Failed claims produce fallback rows with `not_enough_information` status rather than crashing the entire pipeline.
 
-You will upload this log as your chat transcript at submission time. The chat transcript means your conversation with the AI coding tool you used to build the system. It is not the runtime logs, reasoning trace, or conversation history produced by the claim-verification agent you are building.
+## Models Used
 
-If you use multiple AI tools, include the relevant conversation logs from all of them in the same transcript file. Separate each tool's section with a clear divider and label it with the tool name.
+| Component | Model | Purpose |
+|-----------|-------|---------|
+| Pass 1 (VLM) | `gpt-4o-2024-11-20` | Multimodal image + text analysis |
+| Pass 2 (Verdict) | `gpt-4o-2024-11-20` | Final decision synthesis (text only) |
 
-Never paste secrets into the chat. If secrets are needed, use environment variables.
+## Evaluation Results
 
----
+On 20 labeled sample claims (last run: fresh pipeline execution):
 
-## Submission
+| Metric | Score |
+|--------|-------|
+| Overall accuracy | **75.0%** |
+| claim_status | **80.0%** |
+| object_part | **80.0%** |
+| valid_image | **95.0%** |
+| evidence_standard_met | **80.0%** |
+| issue_type | 55.0% |
+| severity | 60.0% |
+| Risk flags F1 | **0.80** |
 
-Submit the following files as instructed by HackerRank:
+Detailed per-claim breakdown available in `evaluation/evaluation_report.md`.
 
-1. **Code zip**: zip your runnable solution, README, prompts/configs, and evaluation folder. Exclude virtualenvs, `node_modules`, build artifacts, and unnecessary generated files.
-2. **Predictions CSV**: your final `output.csv` for all rows in `dataset/claims.csv`.
-3. **Chat transcript**: the `log.txt` from the path in [Chat transcript logging](#chat-transcript-logging).
+### Performance Notes
 
-Before submitting, confirm:
+- 20 sample claims processed in ~47 seconds (most loaded from checkpoint)
+- Fresh claims take ~3-12s each (Pass 1: 2-10s, Pass 2: 1-2s)
+- Full 44-claim run estimated at ~3-4 minutes
 
-- `output.csv` has one row per row in `dataset/claims.csv`.
-- `output.csv` has the exact required columns in the exact required order.
-- Your evaluation files are included in `code.zip`.
+## CLI Options
 
----
+```bash
+# Main pipeline
+python main.py                    # Full run: claims.csv → output.csv
+python main.py --sample           # Run on sample_claims.csv
+python main.py --limit 5          # Process first 5 claims only
+python main.py --resume           # Resume from checkpoints
 
-## Judge interview
+# Evaluation
+python evaluation/main.py         # Full evaluation (20 samples)
+python evaluation/main.py --limit 5
+python evaluation/main.py --skip-api   # Use cached results only
 
-After submission, the AI Judge may ask about your approach, implementation decisions, model usage, evaluation strategy, and how you used AI while building the solution.
+# End-to-end testing
+python test_e2e.py user_001 user_005   # Test specific claims from claims.csv
+python test_e2e.py --sample user_001   # Test from sample_claims.csv
+```
 
-Be prepared to explain your solution in detail.
+## Environment Variables
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `OPENAI_API_KEY` | Yes | OpenAI API key for GPT-4o (Pass 1 and Pass 2) |
+
+## Output Schema (14 columns)
+
+| Column | Values |
+|--------|--------|
+| user_id | pass-through |
+| image_paths | pass-through |
+| user_claim | pass-through |
+| claim_object | car, laptop, package |
+| evidence_standard_met | true, false |
+| evidence_standard_met_reason | free text |
+| risk_flags | semicolon-separated flags or "none" |
+| issue_type | dent, scratch, crack, glass_shatter, broken_part, missing_part, torn_packaging, crushed_packaging, water_damage, stain, none, unknown |
+| object_part | per-object enum (see config.py) |
+| claim_status | supported, contradicted, not_enough_information |
+| claim_status_justification | free text (image-grounded) |
+| supporting_image_ids | semicolon-separated img_N or "none" |
+| valid_image | true, false |
+| severity | none, low, medium, high, unknown |
