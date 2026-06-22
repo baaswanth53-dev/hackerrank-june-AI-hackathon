@@ -224,3 +224,6 @@ python test_e2e.py --sample user_001   # Test from sample_claims.csv
 | supporting_image_ids | semicolon-separated img_N or "none" |
 | valid_image | true, false |
 | severity | none, low, medium, high, unknown |
+
+## License
+This project is licensed under the Apache License 2.0 - see the LICENSE file for details.
