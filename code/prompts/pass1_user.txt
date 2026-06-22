@@ -1,0 +1,9 @@
+CLAIM DETAILS:
+- Object type: {claim_object}
+- User's claim: {user_claim}
+
+IMAGES SUBMITTED: {image_count} image(s)
+Image IDs: {image_ids}
+
+Analyze each submitted image carefully. Compare what you see against the 
+user's claim above. Produce the JSON assessment.
